@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"encoding/json"
 	"log"
+	"strings"
 )
 
 type chirpValidationRequest struct {
@@ -15,7 +16,7 @@ type chirpValidationErrorResponse struct {
 }
 
 type chirpValidationResponse struct {
-	Valid bool `json:"valid"`
+	CleanedBody string `json:"cleaned_body"`
 }
 
 func handlerChirpValidation(w http.ResponseWriter, r *http.Request) {
@@ -23,31 +24,33 @@ func handlerChirpValidation(w http.ResponseWriter, r *http.Request) {
 	validation_req := chirpValidationRequest{}
 	err := decoder.Decode(&validation_req)
 	if err != nil {
-		returnError(w, "Error when decoding", 500)
+		respondWithError(w, "Error when decoding", 500)
 		return
 	}
 
-	if len(validation_req.Body) > 140 {
-		returnError(w, "Chirp is too long", 400)
+	msg := validation_req.Body
+	if len(msg) > 140 {
+		respondWithError(w, "Chirp is too long", 400)
 		return
 	}
 
-	respBody := chirpValidationResponse{
-		Valid: true,
+	
+	words := strings.Split(msg, " ")
+
+	for i, word := range words {
+		lowered := strings.ToLower(word)
+		if lowered == "kerfuffle" || lowered == "sharbert" || lowered == "fornax" {
+			words[i] = "****"	
+		}
 	}
 
-	dat, err := json.Marshal(respBody)
-	if err != nil {
-		returnError(w, "Error Marshalling Json", 500)
-		return
-	}
+	cleaned_msg := strings.Join(words, " ")
+	
+	respondWithJSON(w, 200, chirpValidationResponse{CleanedBody: cleaned_msg,})
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(dat)
 }
 
-func returnError (w http.ResponseWriter, message string, code int) {
+func respondWithError (w http.ResponseWriter, message string, code int) {
 	errRespBody := chirpValidationErrorResponse {
 		Error: message,
 	}
@@ -65,4 +68,17 @@ func returnError (w http.ResponseWriter, message string, code int) {
 	w.WriteHeader(code)
 	w.Write(dat)
 	return
+}
+
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+	dat, err := json.Marshal(payload)
+	if err != nil {
+		respondWithError(w, "Error Marshalling Json", 500)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	w.Write(dat)
+
 }
