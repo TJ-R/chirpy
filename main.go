@@ -1,20 +1,36 @@
 package main
 
+import _ "github.com/lib/pq"
+
 import (
 	"net/http"
 	"sync/atomic"
+	"os"
+	"database/sql"
+	"chirpy/internal/database"
+	"log"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+	dbQueries *database.Queries
 }
 
 type metricsHandler struct {
 }
 
 func main() {
+	dbURL := os.Getenv("DB_URL")
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Printf("%v", err)
+	}
+
+	dbQueries := database.New(db)
+
 	apiCfg := apiConfig {
 		fileserverHits: atomic.Int32{},
+		dbQueries: dbQueries,
 	}
 
 	mux := http.NewServeMux()
