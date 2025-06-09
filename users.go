@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -15,7 +16,7 @@ type newUserRequest struct {
 
 type User struct {
 	ID         uuid.UUID `json:"id"`
-	CreatedAt  time.Time `json:"create_at"`
+	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 	Email      string    `json:"email"`
 }
@@ -26,15 +27,24 @@ func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, req *http.Request
 
 	err := decoder.Decode(&new_user_req)
 	if err != nil {
+		log.Println(err)
 		respondWithError(w, "Error when decoding", 500)
 		return
 	}
 
 	user, err := cfg.dbQueries.CreateUser(context.Background(), new_user_req.Email)
 	if err != nil {
+		log.Println(err)
 		respondWithError(w, "Error when creating user", 500)	
 		return
 	}
 
-	respondWithJSON(w, 201, user)
+	new_user := User {
+		ID: user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email: user.Email,
+	}
+
+	respondWithJSON(w, 201, new_user)
 }

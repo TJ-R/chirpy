@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"chirpy/internal/database"
 	"log"
+	"github.com/joho/godotenv"
 )
 
 type apiConfig struct {
@@ -21,6 +22,7 @@ type metricsHandler struct {
 }
 
 func main() {
+	godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -38,7 +40,9 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/app/",  apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
 	mux.HandleFunc("GET /api/healthz", handlerHealthCheck)
-	mux.HandleFunc("POST /api/validate_chirp", handlerChirpValidation)
+	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerGetChirp)
+	mux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirp)
 	mux.HandleFunc("POST /api/users", apiCfg.handlerCreateUser)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics)
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)

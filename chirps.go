@@ -1,14 +1,28 @@
 package main
 
 import (
-	"net/http"
+	"chirpy/internal/database"
+	"context"
 	"encoding/json"
 	"log"
+	"net/http"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
 )
 
-type chirpValidationRequest struct {
+type chirpRequest struct {
 	Body string `json:"body"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+type Chirp struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"create_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Body      string    `json:"body"`
+	UserID    uuid.UUID `json:"user_id"`
 }
 
 type chirpValidationErrorResponse struct {
@@ -19,16 +33,16 @@ type chirpValidationResponse struct {
 	CleanedBody string `json:"cleaned_body"`
 }
 
-func handlerChirpValidation(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
-	validation_req := chirpValidationRequest{}
-	err := decoder.Decode(&validation_req)
+	chirp_req := chirpRequest{}
+	err := decoder.Decode(&chirp_req)
 	if err != nil {
 		respondWithError(w, "Error when decoding", 500)
 		return
 	}
 
-	msg := validation_req.Body
+	msg := chirp_req.Body
 	if len(msg) > 140 {
 		respondWithError(w, "Chirp is too long", 400)
 		return
@@ -46,8 +60,80 @@ func handlerChirpValidation(w http.ResponseWriter, r *http.Request) {
 
 	cleaned_msg := strings.Join(words, " ")
 	
-	respondWithJSON(w, 200, chirpValidationResponse{CleanedBody: cleaned_msg,})
+	chirp, err := cfg.dbQueries.CreateChirp(context.Background(), database.CreateChirpParams{
+		Body: cleaned_msg,
+		UserID: chirp_req.UserID,
+	})
 
+	if err != nil {
+		log.Println(err)
+		respondWithError(w, "Error when creating chirp", 500)
+		return
+	}
+
+	new_chirp := Chirp {
+		ID: chirp.ID,
+		CreatedAt: chirp.CreatedAt,
+		UpdatedAt: chirp.UpdatedAt,
+		Body: chirp.Body,
+		UserID: chirp.UserID,
+	}
+	
+	respondWithJSON(w, 201, new_chirp)
+
+}
+
+func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
+	chirps, err := cfg.dbQueries.GetChirps(context.Background())
+	if err != nil {
+		log.Println(err)
+		respondWithError(w, "Error when getting chirps", 500)
+		return
+	}
+
+	var recived_chirps []Chirp
+	for _, chirp := range chirps {
+		recived_chirps = append(recived_chirps, Chirp {
+			ID: chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body: chirp.Body,
+			UserID: chirp.UserID,
+		})	
+	}
+
+	respondWithJSON(w, 200, recived_chirps)
+}
+
+func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
+	param := r.PathValue("chirpID")
+	log.Println(param)
+
+	id, err := uuid.Parse(param)
+	log.Println(id)
+	if err != nil {
+		log.Println(err)
+		respondWithError(w, "Failed to parse chirp id", 500)
+	}
+
+	chirp, err := cfg.dbQueries.GetChirp(context.Background(), id)
+	if err != nil {
+		log.Println(err)
+		respondWithError(w, "Failed to find chirp", 404)
+		return
+	}
+
+	log.Println(chirp)
+
+	recieved_chirp := Chirp {
+		ID: chirp.ID,
+		CreatedAt: chirp.CreatedAt,
+		UpdatedAt: chirp.UpdatedAt,
+		Body: chirp.Body,
+		UserID: chirp.UserID,
+	}
+
+	respondWithJSON(w, 200, recieved_chirp)
 }
 
 func respondWithError (w http.ResponseWriter, message string, code int) {
@@ -70,7 +156,7 @@ func respondWithError (w http.ResponseWriter, message string, code int) {
 	return
 }
 
-func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+func respondWithJSON(w http.ResponseWriter, code int, payload any) {
 	dat, err := json.Marshal(payload)
 	if err != nil {
 		respondWithError(w, "Error Marshalling Json", 500)
