@@ -1,6 +1,7 @@
 package main
 
 import (
+	"chirpy/internal/auth"
 	"chirpy/internal/database"
 	"context"
 	"encoding/json"
@@ -34,11 +35,29 @@ type chirpValidationResponse struct {
 }
 
 func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request) {
+
 	decoder := json.NewDecoder(r.Body)
 	chirp_req := chirpRequest{}
 	err := decoder.Decode(&chirp_req)
 	if err != nil {
 		respondWithError(w, "Error when decoding", 500)
+		return
+	}
+
+	// Validate token before creating chirp
+	token, err := auth.GetBearerToken(r.Header)
+
+	if err != nil {
+		log.Println(err)
+		respondWithError(w, "Error when getting token from request", 500)
+		return
+	}
+
+	userIdFromToken, err := auth.ValidateJWT(token, cfg.secret)
+
+	if err != nil {
+		log.Println(err)
+		respondWithError(w, "Error when validating token", 401)
 		return
 	}
 
@@ -62,7 +81,7 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 	
 	chirp, err := cfg.dbQueries.CreateChirp(context.Background(), database.CreateChirpParams{
 		Body: cleaned_msg,
-		UserID: chirp_req.UserID,
+		UserID: userIdFromToken,
 	})
 
 	if err != nil {
@@ -76,7 +95,7 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 		CreatedAt: chirp.CreatedAt,
 		UpdatedAt: chirp.UpdatedAt,
 		Body: chirp.Body,
-		UserID: chirp.UserID,
+		UserID: userIdFromToken,
 	}
 	
 	respondWithJSON(w, 201, new_chirp)

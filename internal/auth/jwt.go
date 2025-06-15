@@ -6,6 +6,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"log"
 	"errors"
+	"net/http"
+	"strings"
+	"fmt"
 )
 
 
@@ -57,4 +60,33 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 	}
 	
 	return user_uuid, nil
+}
+
+func GetBearerToken(headers http.Header) (string, error) {
+	authHeader := headers.Get("Authorization")
+	if authHeader == "" {
+		return "", errors.New("No Auth Provided")
+	}
+
+	if !strings.Contains(authHeader, "Bearer") {
+		return "", errors.New("Auth Headers does not container Bearer")
+	}
+
+	keys := strings.Fields(authHeader)
+
+	foundBearer := false
+	for _, value := range keys {
+		if foundBearer {
+			fmt.Println(value)
+			return value, nil	
+		}
+
+		if value == "Bearer" {
+			foundBearer = true
+		}
+	}
+
+	// Should never get here
+	return "", errors.New("There was an issue retrieving the token")
+
 }

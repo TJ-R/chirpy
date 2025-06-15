@@ -4,7 +4,7 @@ import (
 	"log"
 	"testing"
 	"time"
-
+	"net/http"
 	"github.com/google/uuid"
 )
 
@@ -54,5 +54,41 @@ func TestValidateJWT(t *testing.T) {
 			}
 
 		})
+	}
+}
+
+func TestGetBearerToken(t *testing.T) {
+	goodHeaders := http.Header {
+		"Authorization": {"Bearer TestToken"},
+	}
+
+    noAuthHeaders := http.Header {
+		
+	}
+
+	tests := []struct {
+		name    string
+		headers http.Header
+		wantErr bool
+	} {
+		{
+			name:    "Valid token",
+			headers: goodHeaders,
+			wantErr: false,
+		},
+		{
+			name:    "No Auth in header",
+			headers: noAuthHeaders,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := GetBearerToken(tt.headers)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetBearerToken() error = %v, wanterr %v", err, tt.wantErr)
+			}
+		})		
 	}
 }

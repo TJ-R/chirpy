@@ -3,19 +3,20 @@ package main
 import _ "github.com/lib/pq"
 
 import (
-	"net/http"
-	"sync/atomic"
-	"os"
-	"database/sql"
 	"chirpy/internal/database"
-	"log"
+	"database/sql"
 	"github.com/joho/godotenv"
+	"log"
+	"net/http"
+	"os"
+	"sync/atomic"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
-	dbQueries *database.Queries
-	platform string
+	dbQueries      *database.Queries
+	platform       string
+	secret         string
 }
 
 type metricsHandler struct {
@@ -31,14 +32,15 @@ func main() {
 
 	dbQueries := database.New(db)
 
-	apiCfg := apiConfig {
+	apiCfg := apiConfig{
 		fileserverHits: atomic.Int32{},
-		dbQueries: dbQueries,
-		platform: os.Getenv("PLATFORM"),
+		dbQueries:      dbQueries,
+		platform:       os.Getenv("PLATFORM"),
+		secret:         os.Getenv("SECRET"),
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/app/",  apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
+	mux.Handle("/app/", apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
 	mux.HandleFunc("GET /api/healthz", handlerHealthCheck)
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerGetChirp)
@@ -48,13 +50,10 @@ func main() {
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics)
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 
-
 	server := http.Server{
 		Handler: mux,
-		Addr: ":8080",
+		Addr:    ":8080",
 	}
 
 	server.ListenAndServe()
 }
-
-
