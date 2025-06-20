@@ -8,7 +8,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"fmt"
 )
 
 
@@ -77,7 +76,6 @@ func GetBearerToken(headers http.Header) (string, error) {
 	foundBearer := false
 	for _, value := range keys {
 		if foundBearer {
-			fmt.Println(value)
 			return value, nil	
 		}
 
@@ -88,5 +86,4 @@ func GetBearerToken(headers http.Header) (string, error) {
 
 	// Should never get here
 	return "", errors.New("There was an issue retrieving the token")
-
 }

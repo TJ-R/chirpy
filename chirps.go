@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
+	"sort"
 	"github.com/google/uuid"
 )
 
@@ -103,33 +103,77 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 }
 
 func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
-	chirps, err := cfg.dbQueries.GetChirps(context.Background())
-	if err != nil {
-		log.Println(err)
-		respondWithError(w, "Error when getting chirps", 500)
+	authorID := r.URL.Query().Get("author_id")
+	
+	// No optional param
+	if authorID == "" {
+		chirps, err := cfg.dbQueries.GetChirps(context.Background())
+		if err != nil {
+			log.Println(err)
+			respondWithError(w, "Error when getting chirps", 500)
+			return
+		}
+
+		var recivedChirps []Chirp
+		for _, chirp := range chirps {
+			recivedChirps = append(recivedChirps, Chirp {
+				ID: chirp.ID,
+				CreatedAt: chirp.CreatedAt,
+				UpdatedAt: chirp.UpdatedAt,
+				Body: chirp.Body,
+				UserID: chirp.UserID,
+			})	
+		}
+
+		sortOrder := r.URL.Query().Get("sort")	
+		if sortOrder == "desc" {
+			sort.Slice(recivedChirps, func(i, j int) bool { return recivedChirps[i].CreatedAt.After(recivedChirps[j].CreatedAt)})
+		}
+
+		respondWithJSON(w, 200, recivedChirps)
 		return
 	}
 
-	var recived_chirps []Chirp
+
+	// optional param
+	authorUserID, err := uuid.Parse(authorID)
+	if err != nil {
+		log.Println(err)
+		respondWithError(w, "Failed to parse author id", 500)
+		return
+	}
+
+	chirps, err := cfg.dbQueries.GetChirpsForUser(context.Background(), authorUserID)
+	if err != nil {
+		log.Println(err)
+		respondWithError(w, "Failed to find chirps", 404)
+		return
+	}
+
+	var recivedChirps []Chirp
 	for _, chirp := range chirps {
-		recived_chirps = append(recived_chirps, Chirp {
+		recivedChirps = append(recivedChirps, Chirp {
 			ID: chirp.ID,
 			CreatedAt: chirp.CreatedAt,
 			UpdatedAt: chirp.UpdatedAt,
-			Body: chirp.Body,
-			UserID: chirp.UserID,
+			Body: chirp.Body, UserID: chirp.UserID,
 		})	
 	}
 
-	respondWithJSON(w, 200, recived_chirps)
+	sortOrder := r.URL.Query().Get("sort")	
+	log.Println(sortOrder)
+	if sortOrder == "desc" {
+		sort.Slice(recivedChirps, func(i, j int) bool { return recivedChirps[i].CreatedAt.After(recivedChirps[j].CreatedAt)})
+	}
+
+	respondWithJSON(w, 200, recivedChirps)
+	return
 }
 
 func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 	param := r.PathValue("chirpID")
-	log.Println(param)
 
 	id, err := uuid.Parse(param)
-	log.Println(id)
 	if err != nil {
 		log.Println(err)
 		respondWithError(w, "Failed to parse chirp id", 500)
@@ -142,8 +186,6 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println(chirp)
-
 	recieved_chirp := Chirp {
 		ID: chirp.ID,
 		CreatedAt: chirp.CreatedAt,
@@ -153,6 +195,48 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondWithJSON(w, 200, recieved_chirp)
+}
+
+func (cfg *apiConfig) handlerDeleteChrip(w http.ResponseWriter, r *http.Request) {
+	param := r.PathValue("chirpID")
+	
+	id, err := uuid.Parse(param)
+	if err != nil {
+		log.Println(err)
+		respondWithError(w, "Failed to parse chipr id", 500)
+		return
+	}
+
+	bearerToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Println(err)
+		respondWithError(w, "Error getting token", 401)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(bearerToken, cfg.secret)
+	if err != nil {
+		log.Println(err)
+		respondWithError(w, "Token is invalid", 401)
+		return
+	}
+
+	chirp, err := cfg.dbQueries.GetChirp(context.Background(), id)
+
+	if chirp.UserID != userID {
+		log.Println("UserID does not match chirp's userID")
+		respondWithError(w, "Chirp does not belong to user", 403)
+		return
+	}
+
+	err = cfg.dbQueries.DeleteChirp(context.Background(), id)
+	if err != nil {
+		log.Println(err)
+		respondWithError(w, "Failed to find chirp", 404)
+		return
+	}
+
+	respondWithJSON(w, 204, "")
 }
 
 func respondWithError (w http.ResponseWriter, message string, code int) {
